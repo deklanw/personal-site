@@ -1,0 +1,112 @@
+---
+title: Understanding the synchronous semantics of S.js by comparison to MobX
+slug: synchronous-reactivity
+datePublished: 2019-07-29
+dateLastEdited: 2019-08-02
+description: Comparing synchronous semantics of S.js with MobX
+tags:
+    - reactive programming
+    - synchrony
+---
+
+
+MobX and S.js are both Javascript libraries which implement cell-based reactive programming. The former is best known as a state management solution for React, but it implements a more general paradigm. In fact, you can use MobX (and, S.js for that matter) to build a [declarative view library comparable to React itself](https://github.com/ryansolid/mobx-jsx), with no Virtual DOM! This article considers MobX as an expression of a reactive programming paradigm, not for its utility as state management.
+
+Besides the superficial API differences, MobX and S.js differ more fundamentally in their semantics of time. S.js uses a *synchronous* notion of time where many statements conceptually occur within the same atomic instant. Time is considered to be a sequence of such atomic instants. This is best illustrated by example.
+
+
+MobX,
+```js
+const words = ["dearth", "paucity", "shortage", "lack"];
+
+const a = observable.box(1);
+const b = observable.box("init");
+
+autorun(() => {
+    console.log(a.get());
+    b.set(words.pop());
+});
+
+autorun(() => {
+    console.log(a.get(), b.get());
+});
+
+a.set(2);
+
+```
+
+S.js,
+```js
+const words = ["dearth", "paucity", "shortage", "lack"];
+
+const a = S.data(1);
+const b = S.data("init");
+
+S.root(() => {
+    S(() => {
+        console.log(a());
+        b(words.pop());
+    });
+
+    S(() => {
+        console.log(a(), b());
+    });
+});
+
+a(2);
+```
+
+
+These are analogous pieces of MobX and S.js code. Both setup two cells named `a` and `b`. In the languages of MobX and S.js these are called boxes and data signals, respectively. Each sets up two functions which will be executed automatically whenever their dependencies change; the dependency tracking is automatic. In the languages of MobX and S.js these are called reactive functions and S-computations, respectively. For these purposes you can safely ignore the outer `S.root` in the S.js example.
+
+Let's walk through the MobX example. We initialize two boxes `a` and `b`. We setup one reactive function. It runs once initially printing `1` and setting `b` to `lack`. Since it accessed `a` it will be rerun whenever `a` changes. Then, we setup another reactive function. It prints `a` and `b` : the former is still `1` and the latter was just set to `lack`. Since it accessed both `a` and `b` it will be rerun when `a` or `b` changes. Finally, after both reactive functions are setup to be rerun, we set `a` to `2`. Both reactive functions depend on `a` so they will both be rerun (in the order that they were setup). The first one runs, printing `2` and setting `b` to `shortage`. Then, the second one runs, printing `2` and `shortage` (which just got set in the last reactive function).
+
+
+The output for MobX is shown here,
+
+```
+1
+1 "lack" 
+2
+2 "shortage"
+```
+
+Now, here is the S.js output,
+
+```
+1
+1 "lack" 
+2
+2 "lack" 
+2 "shortage"
+```
+
+It has an extra line! Let's see why that is. 
+
+With S.js, when we set `b` within the first S-computation, *its changes don't go through until the end of the current reaction.* So, when the second S-computation executes it still sees the old value of `b`. Only after that reaction finishes does the change to `b` go through, causing a new reaction which triggers the second S-computation again.
+
+A consequence of this is that *state is immutable within a reaction*. Each reaction can be considered its own atomic moment of time. This behavior may seem unintuitive at first, but it affords a nice notion of consistency. When `a` changes, we freeze all state changes and all computations dependent on `a` run. That's one moment. Once that's done, we batch apply all changes that happened in that moment, triggering a new reaction (assuming something depends on that which was changed). Thus we have a timeline of moments. 
+
+To see all this code run see [https://codesandbox.io/s/reactive-differences-5illz](https://codesandbox.io/s/reactive-differences-5illz)
+
+This notion of time is inspired by the synchronous reactive programming languages (which in turn are inspired by the synchrony hypothesis in digital circuits): Esterel, Lustre, Signal, etc. For a modern take, check out the language Céu which is based on Esterel. Céu is more about control flow rather than dataflow, but if you squint you will notice the [similarities in conception of time](https://ceu-lang.github.io/ceu/out/manual/v0.30/#synchronous-execution-model). Céu compiles to efficient C code and is well-suited for embedded applications like [Arduino programming](https://forum.arduino.cc/index.php?topic=90129.0), or even games ([they argue](https://fsantanna.github.io/pingus/)).
+
+Another area where MobX and S.js differ fundamentally is in S.js's support for nested S-computations with automatic disposal. As far as I know, MobX has no equivalent. From the S.js documentation,
+
+
+```js
+const isLogging = S.value(true);
+
+S(() => {
+    if (isLogging()) {
+        S(() => console.log(foo()));
+        S(() => console.log(bar()));
+        S(() => console.log(bleck()));
+    }
+});
+```
+
+
+Here, if `foo`, `bar`, or `bleck` change, their respective inner S-computation reruns. If `isLogging` changes from `true` to `false` *those inner S-computations are automatically disposed*, i.e. they no longer react to changes to `foo`, `bar`, `bleck`. To see how this could be useful, consider a router for a web app: we could have an outer S-computation with a `route` signal that we switch on, with inner S-computations for each route. When we change routes, all the inner S-computations for that route get cleaned up nicely.
+
+There are many more differences between MobX and S.js, but I think this covers the fundamental ones. MobX has a larger API which is convenient for integrating it as a state management library for React, et al. S.js has a simpler API, optimized for its use in the declarative, VDOM-less view library [Surplus](https://github.com/adamhaile/surplus), alluded to earlier. Although, as far as I can tell there is nothing stopping one from expanding S.js's API and using it for state management, if one were so inclined. In fact, it would probably be [faster](https://github.com/adamhaile/S/issues/5#issuecomment-502411283).

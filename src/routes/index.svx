@@ -1,0 +1,17 @@
+---
+title: Homepage
+---
+
+<style>
+
+
+</style>
+
+<svelte:head>
+	<title>deklan.dev</title>
+</svelte:head>
+
+# Great success!
+
+
+**Try editing this file (src/routes/index.svelte) to test live reloading.**

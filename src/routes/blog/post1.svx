@@ -1,0 +1,17 @@
+---
+title: Post1
+slug: post1
+---
+
+<script>
+  let x = 7;
+</script>
+
+# Sample MDsveX
+
+Sample text sample test
+
+# {x}
+
+what {x}
+

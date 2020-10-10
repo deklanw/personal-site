@@ -1,0 +1,18 @@
+---
+title: Post2
+slug: post2
+---
+
+<script>let x = 5;</script>
+
+# Sample MDsveX
+
+Sample text sample test
+Sample text sample test
+Sample text sample test
+
+# {x}
+
+what {x}
+what {x}
+what {x}
